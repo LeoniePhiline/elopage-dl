@@ -1,10 +1,8 @@
 use std::{
-    collections::BTreeMap,
     ffi::OsStr,
     fmt::{Debug, Display},
     path::{Path, PathBuf},
     process::Stdio,
-    sync::Arc,
 };
 
 use async_recursion::async_recursion;
@@ -29,7 +27,7 @@ use tokio::{
     process::{Child, Command},
     task::JoinHandle,
 };
-use tracing::{debug, error, info, instrument, Level};
+use tracing::{debug, error, info, instrument, warn, Level};
 
 use crate::args::Args;
 use crate::json::*;
@@ -38,8 +36,8 @@ mod args;
 mod json;
 mod trace;
 
-type Id = u32;
-type Position = u8;
+type Id = usize;
+type Position = usize;
 
 static REGEX_VIMEO_IFRAME: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r#"<iframe[^>]* src="(?P<embed_url>https://player\.vimeo\.com/video/[^"]+)""#)
@@ -79,6 +77,7 @@ async fn main() -> Result<()> {
         safe_path(&course.product.name),
     ));
 
+    // Fetch elopage's flat list of lessons and categories.
     let lessons_list: Vec<LessonsListItem> =
         fetch_lessons_list(authenticated_client.clone(), args.course_id)
             .await?
@@ -86,137 +85,229 @@ async fn main() -> Result<()> {
             .filter(|item| item.active)
             .collect();
 
-    let has_categories = lessons_list.iter().any(|item| item.is_category);
+    // Transform the flat list of lessons and categories into a module tree,
+    // where both categories and lessons can be either root items, or children of categories.
+    let (module_tree, remaining_stack) = resolve_module_tree(None, lessons_list);
 
-    let num_lessons_concurrent = args.parallel.clamp(1, u8::MAX) as usize;
+    // We expect the entire stack to be part of the tree.
+    // `remaining_stack` would be non-empty if an item had a `parent_id` which was either not present in the stack,
+    // or it was present, but not a category (but a lesson).
+    if !remaining_stack.is_empty() {
+        error!("Remaining stack left over after resolving module tree! Module tree: {module_tree:#?}, remaining stack: {remaining_stack:#?}");
+    }
 
-    if has_categories {
-        // Lessons nested in categories.
-        let mut category_paths: BTreeMap<Position, PathBuf> = BTreeMap::new();
-        let mut category_positions: BTreeMap<Id, Position> = BTreeMap::new();
+    info!("Resolved module tree.");
+    debug!("Module tree: {module_tree:#?}, remaining stack: {remaining_stack:#?}");
 
-        for category in lessons_list.iter().rev().filter(|item| item.is_category) {
-            info!("Processing category ID '{}'...", category.id);
+    // Some sellers use categories not as containers but merely as separators.
+    // We normalize the tree structure by turning "separator categories" into "container categories".
+    // To do this, we detect empty root categories and hoist root lessons into preceding empty root categories.
+    let module_tree = normalize_module_tree(module_tree);
 
-            let path = format!("{:0>2} {}", category.position, safe_path(&category.name));
-            let path = base_path.join(&path);
+    // TODO: Use.
+    let _num_concurrent = args.parallel.clamp(1, u8::MAX) as usize;
 
-            info!("Creating category path '{}'.", path.display());
-            std::fs::create_dir_all(&path).wrap_err("Failed to create category path")?;
+    // TODO: This could be a flat map of futures. We're going to want to buffer them up to num_concurrent and try_collect await.
+    process_tree_recursive(
+        module_tree,
+        &base_path,
+        args.course_id,
+        authenticated_client,
+        &args.yt_dlp_bin,
+    )
+    .await?;
 
-            category_positions.insert(category.id, category.position);
-            category_paths.insert(category.position, path);
+    Ok(())
+}
 
-            info!("Finished processing category ID '{}'.", category.id);
+/// Recursively resolve the flat stack of lessons list items into a tree structure by matching the items' `parent_id` propertys.
+#[instrument(level = Level::DEBUG)]
+fn resolve_module_tree(
+    parent_id: Option<Id>,
+    stack: Vec<LessonsListItem>,
+) -> (Vec<ModuleTreeItem>, Vec<LessonsListItem>) {
+    // Extract children of given parent ID (`None` to filter for root items) to push onto the tree,
+    // and return the remaining items stack for continued processing.
+    let (tree_level_items, mut remaining_stack): (Vec<_>, Vec<_>) = stack
+        .into_iter()
+        .partition(|item| item.parent_id == parent_id);
+
+    let mut tree_level = Vec::new();
+
+    // Recurse, extracting matching module tree child items from the stack and pushing items onto the tree.
+    for item in tree_level_items {
+        // Ownership note:
+        //
+        // `remaining_stack` moves into the recursed function.
+        // Remaining items, which were not extracted as child (or grand-child) items,
+        // are moved back out of the function, replacing the previous (moved) stack for the next iteration.
+        let (children, remaining) = resolve_module_tree(Some(item.id), remaining_stack);
+        remaining_stack = remaining;
+
+        // Assuming the observation that items with `is_category == true` do not have other items' `parent_id`s pointing to them.
+        // If that turns out to be untrue, then lessons (as opposed to categories) in fact can have children.
+        tree_level.push({
+            if item.is_category {
+                ModuleTreeItem::Category { item, children }
+            } else {
+                if !children.is_empty() {
+                    error!("Collected children for a tree item which is not a category! Children: {children:#?}, Tree item: {item:#?}");
+                }
+                ModuleTreeItem::Lesson { item }
+            }
+        })
+    }
+
+    // Sort by `position` property.
+    tree_level.sort_by(|a, b| {
+        match &a {
+            ModuleTreeItem::Category { item, .. } => &item.position,
+            ModuleTreeItem::Lesson { item } => &item.position,
         }
+        .cmp(match &b {
+            ModuleTreeItem::Category { item, .. } => &item.position,
+            ModuleTreeItem::Lesson { item } => &item.position,
+        })
+    });
 
-        let category_paths = Arc::new(category_paths);
-        let category_positions = Arc::new(category_positions);
+    (tree_level, remaining_stack)
+}
 
-        stream::iter(
-            lessons_list
-                .into_iter()
-                .rev()
-                .filter(|item| !item.is_category),
-        )
-        .map(|lesson| {
-            let category_paths = category_paths.clone();
-            let category_positions = category_positions.clone();
+/// Normalize the module tree:
+/// If an empty root category is directly followed by root lessons, then move these lessons into the empty category.
+#[instrument(level = Level::DEBUG)]
+fn normalize_module_tree(module_tree: Vec<ModuleTreeItem>) -> Vec<ModuleTreeItem> {
+    let mut normalized_tree = Vec::new();
+    let mut latest_empty_category = None;
+    for tree_item in module_tree.into_iter() {
+        let (is_category, is_empty) = match &tree_item {
+            ModuleTreeItem::Category { item, children } => {
+                if children.is_empty() {
+                    warn!("Root category {} is empty! Will attempt to collect its supposed children from directly following root-level lessons.", item.name);
+                    (true, true)
+                } else {
+                    (true, false)
+                }
+            }
+            ModuleTreeItem::Lesson { .. } => (false, false),
+        };
+
+        // Category - push onto normalized tree and register as latest empty category to attach following root lessons to.
+        #[allow(clippy::suspicious_else_formatting)]
+        if is_category {
+            // All root categories are added to the root of the normalized tree, including empty categories.
+            normalized_tree.push(tree_item);
+
+            // Register the index of the latest visited empty category,
+            // or reset to `None` if the visited category is not empty.
+            if is_empty {
+                latest_empty_category = Some(normalized_tree.len() - 1);
+            } else {
+                latest_empty_category = None;
+            }
+        } else
+        // Lesson - to be pushed into empty category, if present.
+        if let Some(empty_category_index) = latest_empty_category {
+            // The latest visited category was empty.
+            // Take out a mutable reference to it, then push the current lesson into the empty category,
+            // instead of adding it to the root of the normalized tree.
+            let empty_category = &mut normalized_tree[empty_category_index];
+            match empty_category {
+                ModuleTreeItem::Category { children, .. } => {
+                    children.push(tree_item);
+                }
+                ModuleTreeItem::Lesson { .. } => {
+                    unreachable!("Empty root category can only be a Category enum variant");
+                }
+            }
+        } else {
+            // If there was no previously visited category, or the last visited category was not empty,
+            // then add the root lesson to the root of the normalized tree.
+            normalized_tree.push(tree_item);
+        }
+    }
+
+    info!("Normalized module tree.");
+    debug!("Normalized module tree: {normalized_tree:#?}");
+
+    normalized_tree
+}
+
+/// Recursively process the module tree, traversing all categories' children and fetching all lesson assets.
+#[async_recursion]
+async fn process_tree_recursive(
+    module_tree: Vec<ModuleTreeItem>,
+    base_path: &Path,
+    course_id: Id,
+    authenticated_client: Client,
+    yt_dlp_bin: &Path,
+) -> Result<()> {
+    stream::iter(module_tree.into_iter().enumerate())
+        .map(|(index, tree_item)| {
             let authenticated_client = authenticated_client.clone();
-            let yt_dlp_bin = args.yt_dlp_bin.clone();
-
             async move {
-                info!(
-                    "Processing lesson ID '{}' of category ID '{}'...",
-                    lesson.id,
-                    lesson
-                        .parent_id
-                        .ok_or_else(|| { eyre!("No parent ID for {lesson:#?}") })?
-                );
-                let category_path =
-                    category_paths
-                        .get(
-                            category_positions
-                                .get(&lesson.parent_id.ok_or_else(|| {
-                                    eyre!("Lesson did not have a parent category ID")
-                                })?)
-                                .ok_or_else(|| {
-                                    eyre!(
-                                    "Parent category for lesson item not found in module positions"
-                                )
-                                })?,
+                // Each of these should return a stream?
+                match tree_item {
+                    ModuleTreeItem::Category {
+                        item: category,
+                        children,
+                    } => {
+                        info!("Processing category ID '{}'...", category.id);
+
+                        // Create a category directory, then recurse into children.
+                        let path = format!("{:0>2} {}", index + 1, safe_path(&category.name));
+                        let path = base_path.join(&path);
+
+                        info!("Creating category path '{}'.", path.display());
+                        std::fs::create_dir_all(&path)
+                            .wrap_err("Failed to create category path")?;
+
+                        process_tree_recursive(
+                            children,
+                            &path,
+                            course_id,
+                            authenticated_client,
+                            yt_dlp_bin,
                         )
-                        .ok_or_else(|| {
-                            eyre!("Parent category for lesson item not found in module tree")
-                        })?;
+                        .await?;
+                    }
+                    ModuleTreeItem::Lesson { item: lesson } => {
+                        let log_fmt = format!(
+                            "lesson ID '{}'{}...",
+                            lesson.id,
+                            match lesson.parent_id {
+                                Some(parent_id) => format!(" of category ID '{parent_id}'"),
+                                None => "".into(),
+                            }
+                        );
+                        info!("Processing {log_fmt}");
 
-                let path = create_lesson_path(category_path, lesson.position, &lesson.name)?;
+                        // Create a lesson directory, then fetch content blocks and extract assets.
+                        let path = create_lesson_path(base_path, index + 1, &lesson.name)?;
 
-                let content_blocks = fetch_lesson_content_blocks(
-                    authenticated_client.clone(),
-                    args.course_id,
-                    lesson.id,
-                    lesson
-                        .content_page_id
-                        .ok_or_else(|| eyre!("Lesson had no content page ID"))?,
-                )
-                .await?;
+                        let content_blocks = fetch_lesson_content_blocks(
+                            authenticated_client,
+                            course_id,
+                            lesson.id,
+                            lesson
+                                .content_page_id
+                                .ok_or_else(|| eyre!("Lesson had no content page ID"))?,
+                        )
+                        .await?;
 
-                download_content_block_assets_recursive(&content_blocks, &path, &yt_dlp_bin)
-                    .await?;
+                        download_content_block_assets_recursive(content_blocks, &path, yt_dlp_bin)
+                            .await?;
 
-                info!(
-                    "Finished processing lesson ID '{}' of category ID '{}'.",
-                    lesson.id,
-                    lesson
-                        .parent_id
-                        .ok_or_else(|| { eyre!("No parent ID for {lesson:#?}") })?
-                );
+                        info!("Finished processing {log_fmt}");
+                    }
+                }
+
                 Ok::<(), Report>(())
             }
         })
-        .buffered(num_lessons_concurrent)
+        .buffered(1) // TODO: Ideally return a flat iterator over futures for lessons of the entire tree, and buffer in main().
         .try_collect()
-        .await?;
-    } else {
-        let base_path = Arc::new(base_path);
-
-        // No categories, just plain lessons.
-        stream::iter(lessons_list.into_iter().rev())
-            .map(|lesson| {
-                let authenticated_client = authenticated_client.clone();
-                let base_path = base_path.clone();
-                let yt_dlp_bin = args.yt_dlp_bin.clone();
-
-                async move {
-                    info!("Processing lesson ID '{}'...", lesson.id);
-
-                    let path = create_lesson_path(&base_path, lesson.position, &lesson.name)?;
-
-                    let content_blocks = fetch_lesson_content_blocks(
-                        authenticated_client.clone(),
-                        args.course_id,
-                        lesson.id,
-                        lesson
-                            .content_page_id
-                            .ok_or_else(|| eyre!("Lesson had no content page ID"))?,
-                    )
-                    .await?;
-
-                    download_content_block_assets_recursive(&content_blocks, &path, &yt_dlp_bin)
-                        .await?;
-
-                    info!("Finished processing lesson ID '{}'.", lesson.id);
-
-                    Ok::<(), Report>(())
-                }
-            })
-            .buffered(num_lessons_concurrent)
-            .try_collect()
-            .await?;
-    }
-
-    Ok(())
+        .await
 }
 
 /// Create a path in which the lesson's downloadable assets will be stored.
@@ -278,15 +369,15 @@ async fn fetch_lesson_content_blocks(
 }
 
 /// Recurse nested content blocks, discovering and downloading all attached videos and files.
-#[async_recursion(?Send)]
+#[async_recursion]
 #[instrument(level = Level::DEBUG)]
 async fn download_content_block_assets_recursive(
-    content_blocks: &Vec<ContentBlock>,
+    content_blocks: Vec<ContentBlock>,
     path: &Path,
     yt_dlp_bin: &Path,
 ) -> Result<()> {
     for content_block in content_blocks {
-        download_content_block_assets_recursive(&content_block.children, path, yt_dlp_bin).await?;
+        download_content_block_assets_recursive(content_block.children, path, yt_dlp_bin).await?;
 
         if let Some(content) = &content_block.content.text {
             for captures in REGEX_VIMEO_IFRAME.captures_iter(content) {
@@ -476,8 +567,9 @@ async fn download(url: &str, name: &Option<String>, path: &Path) -> Result<()> {
 /// Replace some non path-safe characters for wider file-system compatibility (e.g. with ExFAT).
 #[instrument(level = Level::DEBUG)]
 fn safe_path(s: impl AsRef<str> + Debug) -> String {
-    s.as_ref()
+    html_escape::decode_html_entities(s.as_ref())
         .replace(": ", " - ")
-        .replace('/', "_")
+        .replace(" / ", " - ")
+        .replace('/', " - ")
         .replace(['?', '"', ':'], "")
 }

@@ -49,6 +49,17 @@ pub(crate) struct LessonsListItem {
     pub position: Position,
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum ModuleTreeItem {
+    Category {
+        item: LessonsListItem,
+        children: Vec<ModuleTreeItem>,
+    },
+    Lesson {
+        item: LessonsListItem,
+    },
+}
+
 // == Fetch lesson content blocks ==
 
 #[derive(Clone, Debug, Deserialize)]

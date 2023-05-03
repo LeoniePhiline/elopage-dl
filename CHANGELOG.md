@@ -13,11 +13,13 @@ _(none)_
 
 ### Changed
 
-_(none)_
+- Changed lessons list to tree conversion algorithm to support all cases of nested categories and root lessons. (Fixes [#1](https://github.com/LeoniePhiline/elopage-dl/issues/1))
+- Hoisting root lessons into empty categories, where root categories are used as separators rather than as containers.
+- Temporarily, `--parallel` does nothing. All items are offline-cached sequentially.
 
 ### Fixed
 
-_(none)_
+- Asset names might contain HTML entities despite being served in JSON format. These HTML entities are now decoded.
 
 ### Removed
 
