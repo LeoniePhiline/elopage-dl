@@ -25,7 +25,7 @@ pub(crate) fn init(args: &Args) -> Result<()> {
                             .into_directive(),
                         )
                         .from_env_lossy(),
-                ), // .with_filter(LevelFilter::from()),
+                ),
         )
         .with(ErrorLayer::default())
         .try_init()
