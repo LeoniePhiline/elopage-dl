@@ -67,17 +67,57 @@ In this directory, a structure will be created: `./Elopage/<SELLER USERNAME> (<S
 In your terminal, enter the following, while replacing the `<MARKERS>` with the information you gathered above:
 
 ```bash
-./target/release/elopage-dl --course-id '<COURSE ID>' --token '<AUTH TOKEN>' --output-dir 'path/to/target/directory'
+./target/release/elopage-dl -vv --course-id '<COURSE ID>' --token '<AUTH TOKEN>' --output-dir 'path/to/target/directory'
 ```
 
 You can replace `--course-id` by `-c`, `--token` by `-t` and `--output-dir` by `-o`.
 
-After pressing `Enter`, you should see a bunch of stuff printed into your terminal. Look at it or ignore - the interesting part will happen at your target directory.
+After pressing `Enter`, you should see a bunch of stuff printed into your terminal, depending on how many `-v` you pass: 
+
+- None to only show errors.
+- `-v` to also show warnings.
+- `-vv` to show info messages. (This is commonly what you want if you are interested in following the download progress.)
+- `-vvv` to show debug messages. (This is only useful if something is going wrong.)
+
+You can also define the environment variable `RUST_LOG=elopage_dl=debug` to read debug output produced by the helper while skipping debug output produced by its dependencies, such as the `hyper` HTTP library.
+
+Look at the output or ignore as you please - the interesting part will happen at your target directory.
 
 You should see the above described folder structure having been created, with course videos and files being downloaded one by one.
 
+#### Vimeo embeds
+
+Some courses might not use elopage's built-in wistia support, but rather use vimeo embeds. You need `yt-dlp` to fetch these. If `yt-dlp` can be invoked on your computer by just typing `yt-dlp` then you're good. Otherwise, use the `--yt-dlp-bin <PATH TO yt-dlp>` option to provide a full path.
+
 ## Is it blazingly fast?
-No, it's not meant to be. Downloading all files in parallel would be rather trivial, but also a good way to hit the rate limits of either the elopage API or the wistia video source.
+Not by default - and it's not meant to be. Downloading all files in parallel would be rather trivial, but also a good way to hit the rate limits of either the elopage API or the wistia video source.
+
+However, if you like living on the edge, you can use the `--parallel` command line option to pass the number of lessons which should be processed at the same time. You can use `--parallel 50` to offline-cache videos of 50 lessons in parallel, but you might easily get throttled or rate-limited for doing so.
+
+Note that debug (`-vvv` or `RUST_LOG=elopage_dl=debug`) output becomes hard to follow and make sense of when parallel downloading is enabled.
+
+## Full usage
+
+```
+Usage: elopage-dl [OPTIONS] --course-id <COURSE_ID> --token <TOKEN> --output-dir <OUTPUT_DIR>
+
+Options:
+  -c, --course-id <COURSE_ID>    The Course ID [env: COURSE_ID=]
+  -t, --token <TOKEN>            The authorization token [env: AUTH_TOKEN=]
+  -o, --output-dir <OUTPUT_DIR>  Target-dir [env: ELOPAGE_DIR=]
+  -u, --user-agent <USER_AGENT>  User agent (browser signature) [env: USER_AGENT=] [default: "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/112.0"]
+  -l, --language <LANGUAGE>      Content language tag, such as "fr", "de-CH" or "en-CA" [env: CONTENT_LANGUAGE=] [default: en]
+  -p, --parallel <PARALLEL>      Download files of up to N lessons at the same time [env: PARALLEL_DOWNLOADS=] [default: 1]
+  -y, --yt-dlp-bin <YT_DLP_BIN>  Path to the `yt-dlp` binary - required only if vimeo iframes are used [env: YT_DLP_BIN=] [default: yt-dlp]
+  -v, --verbose...               More output per occurrence
+  -q, --quiet...                 Less output per occurrence
+  -h, --help                     Print help
+  -V, --version                  Print version
+```
+
+`[env: <VARIABLE>=]` indicates that you can define an environment variable in place of passing a command line option. This can be useful if you are planning to travel the world for a few months and need to fetch more then a single course.
+
+`[default: <VALUE>]` indicate that no command line option is required if you're fine with using the default value.
 
 ## Disclaimer
 This little helper has been built to help create a supposedly legal temporary offline cache of your purchased elopage course videos and files, imitating the way a browser would fetch and offline-cache videos while you study the course.
