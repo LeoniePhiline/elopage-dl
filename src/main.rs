@@ -21,12 +21,15 @@ const USER_AGENT_HEADER: &str =
     "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/112.0";
 const LANGUAGE_HEADER: &str = "de";
 
+type Id = u32;
+type Position = u8;
+
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 struct Args {
     /// The Course ID
     #[arg(short, long)]
-    course_id: u32,
+    course_id: Id,
 
     /// The authorization token
     #[arg(short, long)]
@@ -161,9 +164,6 @@ fn create_lesson_path(base_path: &Path, position: Position, name: &str) -> Resul
     Ok(path)
 }
 
-type Id = u32;
-type Position = u8;
-
 #[derive(Clone, Debug, Deserialize)]
 struct CourseResponse {
     data: Course,
@@ -186,7 +186,7 @@ struct Product {
     name: String,
 }
 
-async fn fetch_course(client: Client, course_id: u32) -> Result<Course> {
+async fn fetch_course(client: Client, course_id: Id) -> Result<Course> {
     let url = format!("https://api.elopage.com/v1/payer/course_sessions/{course_id}");
     let response: CourseResponse = client.get(url).send().await?.json().await?;
 
@@ -210,14 +210,14 @@ struct LessonsListItem {
     id: Id,
     name: String,
     active: bool,
-    content_page_id: Option<u32>,
+    content_page_id: Option<Id>,
     is_category: bool,
-    parent_id: Option<u32>,
+    parent_id: Option<Id>,
     position: Position,
 }
 
 /// Fetch the course's lessons list, containing a flat structure of lessons and possibly lesson-parent categories.
-async fn fetch_lessons_list(client: Client, course_id: u32) -> Result<Vec<LessonsListItem>> {
+async fn fetch_lessons_list(client: Client, course_id: Id) -> Result<Vec<LessonsListItem>> {
     let url = format!("https://api.elopage.com/v1/payer/course_sessions/{course_id}/lessons?page=1&query=&per=10000&sort_key=id&sort_dir=desc&course_session_id={course_id}");
     let response: LessonsListResponse = client.get(url).send().await?.json().await?;
 
@@ -238,7 +238,7 @@ struct ContentBlocksData {
 
 #[derive(Clone, Debug, Deserialize)]
 struct ContentBlock {
-    // id: u32,
+    // id: Id,
     children: Vec<ContentBlock>,
     goods: Option<Vec<Good>>,
 }
@@ -250,14 +250,14 @@ struct Good {
 
 #[derive(Clone, Debug, Deserialize)]
 struct DigitalGood {
-    // id: u32,
+    // id: Id,
     wistia_data: Option<WistiaData>,
     file: Option<FileAsset>,
 }
 
 #[derive(Clone, Debug, Deserialize)]
 struct WistiaData {
-    // id: u32,
+    // id: Id,
     name: Option<String>,
     r#type: Option<String>,
     assets: Option<Vec<Asset>>,
@@ -278,9 +278,9 @@ struct FileAsset {
 
 async fn fetch_lesson_content_blocks(
     client: Client,
-    course_id: u32,
-    lesson_id: u32,
-    content_page_id: u32,
+    course_id: Id,
+    lesson_id: Id,
+    content_page_id: Id,
 ) -> Result<Vec<ContentBlock>> {
     let url = format!("https://api.elopage.com/v1/payer/course_sessions/{course_id}/lessons/{lesson_id}/content_pages/{content_page_id}?screen_size=desktop");
 
