@@ -45,9 +45,16 @@ Copy the numeric course ID which follows `?course_session_id=`.
 
 #### Auth token
 
-In the network tab, (optionally filter for request type `XHR` and text-filter `api.elopage.com`, then) pick one of the requests going out to `api.elopage.com`.
+Now, back to your browser's developer tools panel:
 
-After clicking the request in the network requests list, you will see "response headers" and "request headers". Under "request headers" find `Authorization: ey...` and copy the entire value starting after the `:` (starting with `ey`).
+In the *Network* tab, pick one of the requests going out to `api.elopage.com`.
+
+You can help yourself to find an appropriate request:
+
+1. Toggle the `XHR` request type filter, and / or 
+2. Type `api.elopage.com` into the request search box.
+
+After clicking the request in the network requests list, you will see *Response Headers* and *Request Headers*. Under *Request Headers* find `Authorization: ey...` and copy the entire value starting after the `:` (thus, starting with `ey`).
 
 #### Target dir
 

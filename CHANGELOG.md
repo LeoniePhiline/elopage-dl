@@ -13,7 +13,7 @@ _(none)_
 
 ### Changed
 
-_(none)_
+- Reworded parts of `README.md` to be easier to understand and follow.
 
 ### Fixed
 
