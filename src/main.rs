@@ -39,8 +39,8 @@ mod trace;
 type Id = usize;
 type Position = usize;
 
-static REGEX_VIMEO_IFRAME: Lazy<Regex> = Lazy::new(|| {
-    Regex::new(r#"<iframe[^>]* src="(?P<embed_url>https://player\.vimeo\.com/video/[^"]+)""#)
+static REGEX_VIDEO_IFRAME: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r#"<iframe[^>]* src="(?P<embed_url>https://(?:player\.vimeo\.com/video/|www.youtube.com/embed/)[^"]+)""#)
         .unwrap()
 });
 
@@ -377,7 +377,7 @@ async fn download_content_block_assets_recursive(
         download_content_block_assets_recursive(content_block.children, path, yt_dlp_bin).await?;
 
         if let Some(content) = &content_block.content.text {
-            for captures in REGEX_VIMEO_IFRAME.captures_iter(content) {
+            for captures in REGEX_VIDEO_IFRAME.captures_iter(content) {
                 if let Some(embed_url_match) = captures.name("embed_url") {
                     let embed_url =
                         html_escape::decode_html_entities(embed_url_match.as_str()).into_owned();

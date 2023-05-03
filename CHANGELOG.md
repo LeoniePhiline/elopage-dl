@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added 
 
-_(none)_
+- Added support for YouTube embeds, next to the existing support for Vimeo embeds and the built-in wistia support. Needs [`yt-dlp`](https://github.com/yt-dlp/yt-dlp).
 
 ### Changed
 
