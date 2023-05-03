@@ -20,6 +20,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Asset names might contain HTML entities despite being served in JSON format. These HTML entities are now decoded.
+- Directory names are now whitespace-trimmed.
+- Asterisks in directory names are replaced by dashes.
 
 ### Removed
 

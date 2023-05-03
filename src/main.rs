@@ -568,5 +568,8 @@ fn safe_path(s: impl AsRef<str> + Debug) -> String {
         .replace(": ", " - ")
         .replace(" / ", " - ")
         .replace('/', " - ")
+        .replace('*', "-")
         .replace(['?', '"', ':'], "")
+        .trim()
+        .to_owned()
 }
