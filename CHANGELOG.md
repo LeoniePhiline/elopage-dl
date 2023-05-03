@@ -14,6 +14,7 @@ _(none)_
 ### Changed
 
 - Reworded parts of `README.md` to be easier to understand and follow.
+- Now using `Id` type alias consistently.
 
 ### Fixed
 
