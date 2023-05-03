@@ -27,7 +27,7 @@ _(none)_
 
 ### Added
 
-- Now using `yt-dlp` to download vimeo embeds from content blocks if elopage built-in wistia support is not used.
+- Now using [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) to download vimeo embeds from content blocks if elopage built-in wistia support is not used.
 - Added `--parallel` option to offline-cache assets of multiple lessons at the same time.
 - Added `tracing` support.
   Use `RUST_LOG=elopage_dl=debug` instead of `-vvv` to read debug output produced by the helper while skipping debug output produced by its dependencies, such as the `hyper` HTTP library.

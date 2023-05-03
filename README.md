@@ -87,7 +87,7 @@ You should see the above described folder structure having been created, with co
 
 #### Vimeo embeds
 
-Some courses might not use elopage's built-in wistia support, but rather use vimeo embeds. You need `yt-dlp` to fetch these. If `yt-dlp` can be invoked on your computer by just typing `yt-dlp` then you're good. Otherwise, use the `--yt-dlp-bin <PATH TO yt-dlp>` option to provide a full path.
+Some courses might not use elopage's built-in wistia support, but rather use vimeo embeds. You need [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) to fetch these. If `yt-dlp` can be invoked on your computer by just typing `yt-dlp` then you're good. Otherwise, use the `--yt-dlp-bin <PATH TO yt-dlp>` option to provide a full path.
 
 ## Is it blazingly fast?
 Not by default - and it's not meant to be. Downloading all files in parallel would be rather trivial, but also a good way to hit the rate limits of either the elopage API or the wistia video source.
