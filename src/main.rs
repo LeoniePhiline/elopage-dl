@@ -457,7 +457,7 @@ async fn download(url: &str, name: &Option<String>, path: &Path) -> Result<()> {
     };
     let path = path.join(safe_path(name));
 
-    info!("Downloading '{}' to '{}'", url, path.display());
+    info!("Downloading '{}' to '{}'...", url, path.display());
 
     let response = reqwest::get(url).await?;
 
@@ -468,7 +468,7 @@ async fn download(url: &str, name: &Option<String>, path: &Path) -> Result<()> {
         tokio::io::copy(&mut chunk?.as_ref(), &mut file).await?;
     }
 
-    info!("Finished downloading '{}' to '{}'", url, path.display());
+    info!("Finished downloading '{}' to '{}'.", url, path.display());
 
     Ok(())
 }
