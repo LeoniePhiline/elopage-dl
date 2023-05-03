@@ -22,7 +22,7 @@ This also means that if you purchased a time-based license, you *must delete* th
 
 ### Get the source, get the toolchain and build your binaries
 
-No prebuild binaries are provided. To compile the tool, simply get `rustup` and `cargo` by following the instructions at [rustup.rs](https://rustup.rs/).
+No prebuilt binaries are provided. To compile the tool, simply get `rustup` and `cargo` by following the instructions at [rustup.rs](https://rustup.rs/).
 
 Then `git clone` this repository (or download as `.zip` file and extract), and run `cargo build --release` in the project folder. Cargo will make sure to download all dependencies from [crates.io](https://crates.io), install and compile them; then it will compile the app for you.
 
