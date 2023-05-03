@@ -338,7 +338,7 @@ async fn download_embed(
             .arg("--paths")
             .arg(path)
             .spawn()
-            .wrap_err_with(|| "Command failed to start ({cmd})")?,
+            .wrap_err_with(|| "yt-dlp command failed to start")?,
     )
     .await?;
 
