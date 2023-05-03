@@ -104,10 +104,7 @@ async fn main() -> Result<()> {
     // To do this, we detect empty root categories and hoist root lessons into preceding empty root categories.
     let module_tree = normalize_module_tree(module_tree);
 
-    // TODO: Use.
-    let _num_concurrent = args.parallel.clamp(1, u8::MAX) as usize;
-
-    // TODO: This could be a flat map of futures. We're going to want to buffer them up to num_concurrent and try_collect await.
+    // TODO: This could be a flat map of futures. We're going to want to buffer them up to num_concurrent (--parallel) and try_collect await.
     process_tree_recursive(
         module_tree,
         &base_path,

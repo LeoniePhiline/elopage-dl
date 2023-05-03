@@ -90,11 +90,7 @@ You should see the above described folder structure having been created, with co
 Some courses might not use elopage's built-in wistia support, but rather use vimeo embeds. You need [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) to fetch these. If `yt-dlp` can be invoked on your computer by just typing `yt-dlp` then you're good. Otherwise, use the `--yt-dlp-bin <PATH TO yt-dlp>` option to provide a full path.
 
 ## Is it blazingly fast?
-Not by default - and it's not meant to be. Downloading all files in parallel would be rather trivial, but also a good way to hit the rate limits of either the elopage API or the wistia video source.
-
-However, if you like living on the edge, you can use the `--parallel` command line option to pass the number of lessons which should be processed at the same time. You can use `--parallel 50` to offline-cache videos of 50 lessons in parallel, but you might easily get throttled or rate-limited for doing so.
-
-Note that debug (`-vvv` or `RUST_LOG=elopage_dl=debug`) output becomes hard to follow and make sense of when parallel downloading is enabled.
+No - and it's not meant to be. Downloading all files in parallel would be possible, but also a good way to hit the rate limits of either the elopage API or the wistia video source.
 
 ## Full usage
 
@@ -107,7 +103,6 @@ Options:
   -o, --output-dir <OUTPUT_DIR>  Target-dir [env: ELOPAGE_DIR=]
   -u, --user-agent <USER_AGENT>  User agent (browser signature) [env: USER_AGENT=] [default: "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/112.0"]
   -l, --language <LANGUAGE>      Content language tag, such as "fr", "de-CH" or "en-CA" [env: CONTENT_LANGUAGE=] [default: en]
-  -p, --parallel <PARALLEL>      Download files of up to N lessons at the same time [env: PARALLEL_DOWNLOADS=] [default: 1]
   -y, --yt-dlp-bin <YT_DLP_BIN>  Path to the `yt-dlp` binary - required only if vimeo iframes are used [env: YT_DLP_BIN=] [default: yt-dlp]
   -v, --verbose...               More output per occurrence
   -q, --quiet...                 Less output per occurrence
