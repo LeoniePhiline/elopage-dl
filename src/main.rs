@@ -180,7 +180,7 @@ fn normalize_module_tree(module_tree: Vec<ModuleTreeItem>) -> Vec<ModuleTreeItem
         let (is_category, is_empty) = match &tree_item {
             ModuleTreeItem::Category { item, children } => {
                 if children.is_empty() {
-                    warn!("Root category {} is empty! Will attempt to collect its supposed children from directly following root-level lessons.", item.name);
+                    warn!("Root category '{}' is empty! Will attempt to collect its supposed children from directly following root-level lessons.", item.name);
                     (true, true)
                 } else {
                     (true, false)
