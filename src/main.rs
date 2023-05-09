@@ -3,6 +3,7 @@ use std::{
     fmt::{Debug, Display},
     path::{Path, PathBuf},
     process::Stdio,
+    sync::Arc,
 };
 
 use async_recursion::async_recursion;
@@ -11,7 +12,11 @@ use color_eyre::{
     eyre::{eyre, Context},
     Report, Result,
 };
-use futures::stream::{self, StreamExt, TryStreamExt};
+use futures::{
+    future::BoxFuture,
+    stream::{self, BoxStream, StreamExt, TryStreamExt},
+    FutureExt,
+};
 use once_cell::sync::Lazy;
 use regex::Regex;
 use reqwest::{
@@ -104,15 +109,25 @@ async fn main() -> Result<()> {
     // To do this, we detect empty root categories and hoist root lessons into preceding empty root categories.
     let module_tree = normalize_module_tree(module_tree);
 
-    // TODO: This could be a flat map of futures. We're going to want to buffer them up to num_concurrent (--parallel) and try_collect await.
-    process_tree_recursive(
+    // Recurse through the module tree, discovering linked and embedded assets,
+    // and create a stream of boxed download futures to process with a user-determined amount of parallelism.
+    // TODO: Lesson details are eagerly fetched while processing the tree. (`fetch_lesson_content_blocks`)
+    // TODO: It could be nice if they were lazily fetched whenever `StreamExt::buffered` (below) runs empty.
+    let downloads_stream = process_tree_recursive(
         module_tree,
-        &base_path,
+        Arc::new(base_path),
         args.course_id,
         authenticated_client,
-        &args.yt_dlp_bin,
+        Arc::new(args.yt_dlp_bin),
     )
     .await?;
+
+    // Download between 1 and `--parallel` assets in parallel.
+    downloads_stream
+        .buffered(args.parallel.clamp(1, usize::MAX))
+        // Shortcut on download errors.
+        .try_collect::<Vec<()>>()
+        .await?;
 
     Ok(())
 }
@@ -234,16 +249,18 @@ fn normalize_module_tree(module_tree: Vec<ModuleTreeItem>) -> Vec<ModuleTreeItem
 #[async_recursion]
 async fn process_tree_recursive(
     module_tree: Vec<ModuleTreeItem>,
-    base_path: &Path,
+    base_path: Arc<PathBuf>,
     course_id: Id,
     authenticated_client: Client,
-    yt_dlp_bin: &Path,
-) -> Result<()> {
-    stream::iter(module_tree.into_iter().enumerate())
-        .map(|(index, tree_item)| {
+    yt_dlp_bin: Arc<PathBuf>,
+) -> Result<BoxStream<'static, BoxFuture<'static, Result<()>>>> {
+    let mut process_tree_stream = stream::iter(module_tree.into_iter().enumerate())
+        .then(move |(index, tree_item)| {
             let authenticated_client = authenticated_client.clone();
+            let base_path = base_path.clone();
+            let yt_dlp_bin = yt_dlp_bin.clone();
+
             async move {
-                // Each of these should return a stream?
                 match tree_item {
                     ModuleTreeItem::Category {
                         item: category,
@@ -253,7 +270,7 @@ async fn process_tree_recursive(
 
                         // Create a category directory, then recurse into children.
                         let path = format!("{:0>2} {}", index + 1, safe_path(&category.name));
-                        let path = base_path.join(&path);
+                        let path = base_path.join(path);
 
                         info!("Creating category path '{}'.", path.display());
                         std::fs::create_dir_all(&path)
@@ -261,12 +278,12 @@ async fn process_tree_recursive(
 
                         process_tree_recursive(
                             children,
-                            &path,
+                            Arc::new(path),
                             course_id,
                             authenticated_client,
                             yt_dlp_bin,
                         )
-                        .await?;
+                        .await
                     }
                     ModuleTreeItem::Lesson { item: lesson } => {
                         let log_fmt = format!(
@@ -280,7 +297,7 @@ async fn process_tree_recursive(
                         info!("Processing {log_fmt}");
 
                         // Create a lesson directory, then fetch content blocks and extract assets.
-                        let path = create_lesson_path(base_path, index + 1, &lesson.name)?;
+                        let path = create_lesson_path(&base_path, index + 1, &lesson.name)?;
 
                         let content_blocks = fetch_lesson_content_blocks(
                             authenticated_client,
@@ -290,21 +307,32 @@ async fn process_tree_recursive(
                                 .content_page_id
                                 .ok_or_else(|| eyre!("Lesson had no content page ID"))?,
                         )
-                        .await?;
+                        .await?; // TODO: Can we lazily fetch lessons, driven by downloads stream buffering?
 
-                        download_content_block_assets_recursive(content_blocks, &path, yt_dlp_bin)
-                            .await?;
+                        let stream = download_content_block_assets_recursive(
+                            content_blocks,
+                            Arc::new(path),
+                            yt_dlp_bin,
+                        );
 
                         info!("Finished processing {log_fmt}");
+
+                        Ok::<_, Report>(stream)
                     }
                 }
-
-                Ok::<(), Report>(())
             }
         })
-        .buffered(1) // TODO: Ideally return a flat iterator over futures for lessons of the entire tree, and buffer in main().
-        .try_collect()
-        .await
+        .boxed();
+
+    let mut downloads_stream = stream::iter(Vec::new()).boxed();
+
+    // Handle the result per item (shortcut the discovery stream on error) and then flatten the nested stream.
+    // TODO: Here we are driving the tree assets discovery stream, thus downloading lesson details eagerly. Can we do that lazily instead?
+    while let Some(next_stream) = process_tree_stream.try_next().await? {
+        downloads_stream = downloads_stream.chain(next_stream).boxed();
+    }
+
+    Ok(downloads_stream.boxed())
 }
 
 /// Create a path in which the lesson's downloadable assets will be stored.
@@ -351,70 +379,108 @@ async fn fetch_lesson_content_blocks(
     content_page_id: Id,
 ) -> Result<Vec<ContentBlock>> {
     let url = format!("https://api.elopage.com/v1/payer/course_sessions/{course_id}/lessons/{lesson_id}/content_pages/{content_page_id}?screen_size=desktop");
-
     debug!("URL: {url}");
 
     let response: serde_json::Value = authenticated_client.get(&url).send().await?.json().await?;
-
     debug!("Raw JSON: {response:#?}");
 
     let response: ContentBlocksResponse = serde_json::from_value(response)?;
-
     debug!("Parsed JSON: {response:#?}");
 
     Ok(response.data.content_blocks)
 }
 
 /// Recurse nested content blocks, discovering and downloading all attached videos and files.
-#[async_recursion]
+/// All discovered assets are fed into the same stream, which is returned to the caller.
 #[instrument(level = Level::DEBUG)]
-async fn download_content_block_assets_recursive(
+fn download_content_block_assets_recursive(
     content_blocks: Vec<ContentBlock>,
-    path: &Path,
-    yt_dlp_bin: &Path,
-) -> Result<()> {
-    for content_block in content_blocks {
-        download_content_block_assets_recursive(content_block.children, path, yt_dlp_bin).await?;
+    path: Arc<PathBuf>,
+    yt_dlp_bin: Arc<PathBuf>,
+) -> BoxStream<'static, BoxFuture<'static, Result<()>>> {
+    let stream = stream::iter(content_blocks).flat_map(move |content_block| {
+        let path = path.clone();
+        let yt_dlp_bin = yt_dlp_bin.clone();
 
-        if let Some(content) = &content_block.content.text {
-            for captures in REGEX_VIDEO_IFRAME.captures_iter(content) {
-                if let Some(embed_url_match) = captures.name("embed_url") {
-                    let embed_url =
-                        html_escape::decode_html_entities(embed_url_match.as_str()).into_owned();
+        // Recurse into nested content blocks, if any,
+        // returning a stream of download futures for all assets discovered in deeper-nested content blocks.
+        // If this content block has no children, then an empty stream will be returned, which is immediately ready to yield `None`.
+        let mut stream = download_content_block_assets_recursive(
+            content_block.children,
+            path.clone(),
+            yt_dlp_bin.clone(),
+        );
 
-                    download_embed(embed_url, path, yt_dlp_bin).await?;
-                }
-            }
+        // Chain download futures for assets discovered in the content block's HTML content to the stream returned from recursion.
+        if let Some(content) = content_block.content.text {
+            // Extract vimeo and youtube embed URLs from this content block's text content.
+            let embed_urls = REGEX_VIDEO_IFRAME
+                .captures_iter(&content)
+                .filter_map(|captures| captures.name("embed_url"))
+                .map(|embed_url_match| {
+                    html_escape::decode_html_entities(embed_url_match.as_str()).into_owned()
+                })
+                .collect::<Vec<_>>();
+
+            // Create a new stream of pinned download futures, and chain it to the stream returned from recursion.
+            let path = path.clone();
+            stream = stream
+                .chain(stream::iter(embed_urls).map(move |embed_url| {
+                    let path = path.clone();
+                    let yt_dlp_bin = yt_dlp_bin.clone();
+
+                    async move { download_embed(embed_url, path, yt_dlp_bin).await }.boxed()
+                }))
+                .boxed();
         }
 
-        if let Some(goods) = &content_block.goods {
-            for good in goods {
-                let good = &good.digital;
-                if let Some(file) = &good.file {
-                    download_file(file, path).await?;
-                }
+        // Chain download futures for assets directly attached to the content block to the stream returned from recursion.
+        if let Some(goods) = content_block.goods {
+            stream = stream
+                .chain(stream::iter(goods).flat_map(move |good| {
+                    let good = good.digital;
 
-                if let Some(wistia_data) = &good.wistia_data {
-                    download_video(wistia_data, path).await?;
-                }
-            }
+                    // None or more downloadable assets ("goods") might be directly attached to the content block.
+                    let mut download_futures: Vec<BoxFuture<'static, Result<()>>> = vec![];
+
+                    // Files can be streamed to disk by URL.
+                    if let Some(file) = good.file {
+                        let path = path.clone();
+                        download_futures
+                            .push(async move { download_file(file, path).await }.boxed());
+                    }
+
+                    // Wistia videos can be streamed to disk after discovering the URL to the largest version of the video.
+                    if let Some(wistia_data) = good.wistia_data {
+                        let path = path.clone();
+                        download_futures
+                            .push(async move { download_video(wistia_data, path).await }.boxed());
+                    }
+
+                    stream::iter(download_futures).boxed()
+                }))
+                .boxed();
         }
-    }
 
-    Ok(())
+        stream
+    });
+
+    Box::pin(stream)
 }
 
 /// Download an embedded Vimeo video.
 #[instrument(level = Level::DEBUG)]
 async fn download_embed(
     embed_url: impl AsRef<OsStr> + Display + Debug,
-    path: &Path,
-    yt_dlp_bin: &Path,
+    path: Arc<PathBuf>,
+    yt_dlp_bin: Arc<PathBuf>,
 ) -> Result<()> {
     info!("Downloading '{}' to '{}'...", embed_url, path.display());
 
+    // Spawn a task handling the child process,
+    // and read piped IO streams into trace logs.
     child_read_to_end(
-        Command::new(yt_dlp_bin)
+        Command::new(&*yt_dlp_bin)
             .kill_on_drop(true)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -424,7 +490,7 @@ async fn download_embed(
             .arg("Referer:https://elopage.com/")
             .arg(&embed_url)
             .arg("--paths")
-            .arg(path)
+            .arg(&*path)
             .spawn()
             .wrap_err("yt-dlp command failed to start")?,
     )
@@ -503,13 +569,13 @@ fn consume_stream<A: AsyncRead + Unpin + Send + 'static + Debug>(
 
 /// Stream a file asset to disk.
 #[instrument(level = Level::DEBUG)]
-async fn download_file(file: &FileAsset, path: &Path) -> Result<()> {
+async fn download_file(file: FileAsset, path: Arc<PathBuf>) -> Result<()> {
     if let Some(original) = &file.original {
         if original == "https://api.elopage.com/pca/digitals/files/original/missing.png" {
             return Ok(());
         }
 
-        download(original, &file.name, path).await?;
+        download(original, &file.name, &path).await?;
     }
 
     Ok(())
@@ -517,14 +583,14 @@ async fn download_file(file: &FileAsset, path: &Path) -> Result<()> {
 
 /// Stream a video to disk.
 #[instrument(level = Level::DEBUG)]
-async fn download_video(wistia_data: &WistiaData, path: &Path) -> Result<()> {
+async fn download_video(wistia_data: WistiaData, path: Arc<PathBuf>) -> Result<()> {
     if let Some(assets) = &wistia_data.assets {
         assert!(matches!(wistia_data.r#type.as_deref(), Some("Video")));
 
         let largest_asset = assets.iter().max_by_key(|asset| asset.file_size);
         // None if assets is empty
         if let Some(asset) = largest_asset {
-            download(&asset.url, &wistia_data.name, path).await?;
+            download(&asset.url, &wistia_data.name, &path).await?;
         }
     }
 

@@ -32,6 +32,10 @@ pub(crate) struct Args {
     #[arg(short, long, env = "CONTENT_LANGUAGE", default_value = "en")]
     pub language: String,
 
+    /// Download files of up to N lessons at the same time
+    #[arg(short, long, env = "PARALLEL_DOWNLOADS", default_value_t = 1)]
+    pub parallel: usize,
+
     /// Path to the `yt-dlp` binary - required only if vimeo iframes are used.
     #[arg(short, long, env = "YT_DLP_BIN", default_value = "yt-dlp")]
     pub yt_dlp_bin: PathBuf,
