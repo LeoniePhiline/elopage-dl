@@ -9,23 +9,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added 
 
+_(none)_
+
+### Changed
+
+_(none)_
+
+### Fixed
+
+_(none)_
+
+### Removed
+
+_(none)_
+
+## [0.3.0] - 2023-05-10
+
+### Added 
+
 - Added support for YouTube embeds, next to the existing support for Vimeo embeds and the built-in wistia support. Needs [`yt-dlp`](https://github.com/yt-dlp/yt-dlp).
 
 ### Changed
 
-- Changed lessons list to tree conversion algorithm to support all cases of nested categories and root lessons. (Fixes [#1](https://github.com/LeoniePhiline/elopage-dl/issues/1))
+- All lesson content is now discovered eagerly, then downloads are performed in parallel, if a `--parallel` value greater than `1` (default) is provided. (Closes [#2](https://github.com/LeoniePhiline/elopage-dl/issues/2) with an alternative approach.)
+- Changed lessons list to tree conversion algorithm to support all cases of nested categories and root lessons. (Fixes [#1](https://github.com/LeoniePhiline/elopage-dl/issues/1).)
 - Hoisting root lessons into empty categories, where root categories are used as separators rather than as containers.
-- Temporarily, `--parallel` does nothing. All items are offline-cached sequentially.
 
 ### Fixed
 
 - Asset names might contain HTML entities despite being served in JSON format. These HTML entities are now decoded.
 - Directory names are now whitespace-trimmed.
 - Asterisks in directory names are replaced by dashes.
-
-### Removed
-
-_(none)_
 
 ## [0.2.0] - 2023-05-03
 
@@ -48,7 +62,8 @@ _(none)_
 
 - Initial implementation.
 
-[unreleased]: https://github.com/LeoniePhiline/showcase-dl/compare/0.2.0...HEAD
+[unreleased]: https://github.com/LeoniePhiline/showcase-dl/compare/0.3.0...HEAD
+[0.3.0]: https://github.com/LeoniePhiline/elopage-dl/releases/tag/0.3.0
 [0.2.0]: https://github.com/LeoniePhiline/elopage-dl/releases/tag/0.2.0
 [0.1.0]: https://github.com/LeoniePhiline/elopage-dl/releases/tag/0.1.0
 
