@@ -522,7 +522,7 @@ async fn child_read_to_end(mut child: Child) -> Result<()> {
     let consume_stderr = child
         .stderr
         .take()
-        .map(|stderr| consume_stream(stderr, |line| error!(line)));
+        .map(|stderr| consume_stream(stderr, |line| warn!(line)));
 
     let await_exit = async {
         tokio::spawn(async move {
