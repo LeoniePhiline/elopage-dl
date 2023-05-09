@@ -27,7 +27,7 @@ use reqwest::{
     Client,
 };
 use tokio::{
-    fs::File,
+    fs::{create_dir_all, File},
     io::{AsyncBufReadExt, AsyncRead, BufReader},
     process::{Child, Command},
     task::JoinHandle,
@@ -273,7 +273,8 @@ async fn process_tree_recursive(
                         let path = base_path.join(path);
 
                         info!("Creating category path '{}'.", path.display());
-                        std::fs::create_dir_all(&path)
+                        create_dir_all(&path)
+                            .await
                             .wrap_err("Failed to create category path")?;
 
                         process_tree_recursive(
@@ -297,7 +298,7 @@ async fn process_tree_recursive(
                         info!("Processing {log_fmt}");
 
                         // Create a lesson directory, then fetch content blocks and extract assets.
-                        let path = create_lesson_path(&base_path, index + 1, &lesson.name)?;
+                        let path = create_lesson_path(&base_path, index + 1, &lesson.name).await?;
 
                         let content_blocks = fetch_lesson_content_blocks(
                             authenticated_client,
@@ -337,11 +338,13 @@ async fn process_tree_recursive(
 
 /// Create a path in which the lesson's downloadable assets will be stored.
 #[instrument(level = Level::DEBUG)]
-fn create_lesson_path(base_path: &Path, position: Position, name: &str) -> Result<PathBuf> {
+async fn create_lesson_path(base_path: &Path, position: Position, name: &str) -> Result<PathBuf> {
     let path = base_path.join(format!("{:0>2} {}", position, safe_path(name)));
 
     info!("Creating lesson path '{}'.", path.display());
-    std::fs::create_dir_all(&path).wrap_err("Failed to create lesson path")?;
+    create_dir_all(&path)
+        .await
+        .wrap_err("Failed to create lesson path")?;
 
     Ok(path)
 }
