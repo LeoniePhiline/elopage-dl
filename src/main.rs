@@ -269,8 +269,11 @@ async fn process_tree_recursive(
                         info!("Processing category ID '{}'...", category.id);
 
                         // Create a category directory, then recurse into children.
-                        let path = format!("{:0>2} {}", index + 1, safe_path(&category.name));
-                        let path = base_path.join(path);
+                        let path = base_path.join(format!(
+                            "{:0>2} {}",
+                            index + 1,
+                            safe_path(&category.name)
+                        ));
 
                         info!("Creating category path '{}'.", path.display());
                         create_dir_all(&path)
@@ -297,9 +300,18 @@ async fn process_tree_recursive(
                         );
                         info!("Processing {log_fmt}");
 
-                        // Create a lesson directory, then fetch content blocks and extract assets.
-                        let path = create_lesson_path(&base_path, index + 1, &lesson.name).await?;
+                        // Create a path in which the lesson's downloadable assets will be stored, then fetch content blocks and extract assets.
+                        let path = base_path.join(format!(
+                            "{:0>2} {}",
+                            index + 1,
+                            safe_path(&lesson.name)
+                        ));
+                        info!("Creating lesson path '{}'.", path.display());
+                        create_dir_all(&path)
+                            .await
+                            .wrap_err("Failed to create lesson path")?;
 
+                        // Fetch the lesson's nested content blocks structure.
                         let content_blocks = fetch_lesson_content_blocks(
                             authenticated_client,
                             course_id,
@@ -310,6 +322,9 @@ async fn process_tree_recursive(
                         )
                         .await?; // TODO: Can we lazily fetch lessons, driven by downloads stream buffering?
 
+                        // Create a stream of download futures from the lesson's content blocks structure.
+                        // Downloadable assets can either be linked to content blocks directly as "goods",
+                        // or found as embedded iframes in lesson HTML content.
                         let stream = download_content_block_assets_recursive(
                             content_blocks,
                             Arc::new(path),
@@ -334,19 +349,6 @@ async fn process_tree_recursive(
     }
 
     Ok(downloads_stream.boxed())
-}
-
-/// Create a path in which the lesson's downloadable assets will be stored.
-#[instrument(level = Level::DEBUG)]
-async fn create_lesson_path(base_path: &Path, position: Position, name: &str) -> Result<PathBuf> {
-    let path = base_path.join(format!("{:0>2} {}", position, safe_path(name)));
-
-    info!("Creating lesson path '{}'.", path.display());
-    create_dir_all(&path)
-        .await
-        .wrap_err("Failed to create lesson path")?;
-
-    Ok(path)
 }
 
 /// Fetch a course's metadata.
@@ -393,6 +395,7 @@ async fn fetch_lesson_content_blocks(
     Ok(response.data.content_blocks)
 }
 
+// TODO: Rename functions like these, which no longer actively download, but rather compile a stream of lazy download futures.
 /// Recurse nested content blocks, discovering and downloading all attached videos and files.
 /// All discovered assets are fed into the same stream, which is returned to the caller.
 #[instrument(level = Level::DEBUG)]
