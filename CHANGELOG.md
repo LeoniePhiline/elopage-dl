@@ -62,7 +62,7 @@ _(none)_
 
 - Initial implementation.
 
-[unreleased]: https://github.com/LeoniePhiline/showcase-dl/compare/0.3.0...HEAD
+[unreleased]: https://github.com/LeoniePhiline/elopage-dl/compare/0.3.0...HEAD
 [0.3.0]: https://github.com/LeoniePhiline/elopage-dl/releases/tag/0.3.0
 [0.2.0]: https://github.com/LeoniePhiline/elopage-dl/releases/tag/0.2.0
 [0.1.0]: https://github.com/LeoniePhiline/elopage-dl/releases/tag/0.1.0
