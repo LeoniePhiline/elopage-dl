@@ -2,16 +2,19 @@
 *Watch your elopage course on the airplane.*
 
 ## Why does this exist?
+
 There are still places in this world where you have no internet connection and thus cannot keep on learning all the good stuff you purchased on elopage.
 
 This little helper makes it comfortable to fetch the course contents (videos, PDFs, and other files) of your purchased elopage online course to disk, so that you can load them onto your phone or tablet and study on the airplane.
 
 ## So is this a hacking tool?
+
 No. There is no hacking involved. This tool does not give you access to anything you would not otherwise have access to.
 
 What it does is really quite trivial, and you could do it by hand using your browser devtool's network tab. It would just take you longer - and why do it by hand if you can automate the task?
 
 ## Your responsibility
+
 Please be aware that lots of small-scale solo-entrepreneur teachers and coaches make their living by gathering expertise, creating online courses - which takes a considerable amount of effort and time to do! - and offering them for other people to learn from.
 
 **Respect their work!**
@@ -92,6 +95,7 @@ You should see the above described folder structure having been created, with co
 Some courses might not use elopage's built-in wistia support, but rather use vimeo embeds. You need [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) to fetch these. If `yt-dlp` can be invoked on your computer by just typing `yt-dlp` then you're good. Otherwise, use the `--yt-dlp-bin <PATH TO yt-dlp>` option to provide a full path.
 
 ## Is it blazingly fast?
+
 Not by default - and it's not meant to be. Downloading all files in parallel would be rather trivial, but also a good way to hit the rate limits of either the elopage API or the wistia/vimeo/youtube video source.
 
 However, if you like living on the edge, you can use the `--parallel` command line option to pass the number of lessons which should be processed at the same time. You can use `--parallel 50` to offline-cache videos of 50 lessons in parallel, but you might easily get throttled or rate-limited for doing so.
@@ -121,7 +125,21 @@ Options:
 
 `[default: <VALUE>]` indicate that no command line option is required if you're fine with using the default value.
 
+## Credentials
+
+This little tool is standing on the shoulders of giants.
+
+- 🦀 [The Rust programming language](https://www.rust-lang.org/)
+- 🗼 [The Tokio async runtime and ecosystem](https://tokio.rs/)
+- 🌏 [The `reqwest` HTTP client and its underlying `hyper` HTTP library](https://github.com/seanmonstar/reqwest)
+- 📺 [The downloader for everything except vimeo showcases: `yt-dlp`](https://github.com/yt-dlp/yt-dlp)
+- 💥 [`color-eyre` and its predecessor `anyhow` for ergonomic error handling](https://github.com/yaahc/color-eyre)
+- 💬 [The `clap` commandline argument parsing library](https://github.com/clap-rs/clap)
+- 🍵 [Jon Gjengset and his awesome "Crust of Rust" series of videos](https://www.youtube.com/playlist?list=PLqbS7AVVErFiWDOAVrPt7aYmnuuOLYvOa) (You should totally [buy his book](https://nostarch.com/rust-rustaceans)!)
+
+
 ## Disclaimer
+
 This little helper has been built to help create a supposedly legal temporary offline cache of your purchased elopage course videos and files, imitating the way a browser would fetch and offline-cache videos while you study the course.
 
 Make sure you hold the copyright of, or another granted license to any material, and tread on safe legal ground according to the country you live in, before you use this.
