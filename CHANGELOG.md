@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-_(none)_
+- Replace [`html-escape`](https://crates.io/crates/html-escape) by [`htmlize`](https://crates.io/crates/htmlize), capable of decoding non-numeric HTML entities.
 
 ### Fixed
 

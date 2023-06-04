@@ -423,9 +423,7 @@ fn download_content_block_assets_recursive(
             let embed_urls = REGEX_VIDEO_IFRAME
                 .captures_iter(&content)
                 .filter_map(|captures| captures.name("embed_url"))
-                .map(|embed_url_match| {
-                    html_escape::decode_html_entities(embed_url_match.as_str()).into_owned()
-                })
+                .map(|embed_url_match| htmlize::unescape(embed_url_match.as_str()).into_owned())
                 .collect::<Vec<_>>();
 
             // Create a new stream of pinned download futures, and chain it to the stream returned from recursion.
@@ -636,7 +634,7 @@ async fn download(url: &str, name: &Option<String>, path: &Path) -> Result<()> {
 /// Replace some non path-safe characters for wider file-system compatibility (e.g. with ExFAT).
 #[instrument(level = Level::DEBUG)]
 fn safe_path(s: impl AsRef<str> + Debug) -> String {
-    html_escape::decode_html_entities(s.as_ref())
+    htmlize::unescape(s.as_ref())
         .replace(": ", " - ")
         .replace(" / ", " - ")
         .replace('/', " - ")
