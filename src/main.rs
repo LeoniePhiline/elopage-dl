@@ -549,7 +549,9 @@ async fn child_read_to_end(mut child: Child) -> Result<()> {
 // Await the `JoinHandle` if the given `Option` is `Some(_)`
 #[inline]
 async fn maybe_join(maybe_spawned: Option<JoinHandle<Result<()>>>) -> Result<()> {
-    maybe_spawned.map(|join: JoinHandle<Result<()>>| async { join.await? });
+    if let Some(spawned) = maybe_spawned {
+        return spawned.await?;
+    }
 
     Ok(())
 }
