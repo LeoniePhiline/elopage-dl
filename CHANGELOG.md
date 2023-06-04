@@ -24,10 +24,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Change `maybe_join` to propagate future output result. ([#3](https://github.com/LeoniePhiline/elopage-dl/issues/3))
 
-### Removed
-
-_(none)_
-
 ## [0.3.0] - 2023-05-10
 
 ### Added 
