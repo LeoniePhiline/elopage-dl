@@ -98,7 +98,7 @@ async fn main() -> Result<()> {
     // `remaining_stack` would be non-empty if an item had a `parent_id` which was either not present in the stack,
     // or it was present, but not a category (but a lesson).
     if !remaining_stack.is_empty() {
-        error!("Remaining stack left over after resolving module tree! Module tree: {module_tree:#?}, remaining stack: {remaining_stack:#?}");
+        warn!("Remaining stack left over after resolving module tree! Module tree: {module_tree:#?}, remaining stack: {remaining_stack:#?}");
     }
 
     info!("Resolved module tree.");
