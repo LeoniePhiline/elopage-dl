@@ -490,6 +490,7 @@ async fn download_embed(
             .stderr(Stdio::piped())
             .arg("--newline")
             .arg("--no-colors")
+            .arg("--legacy-server-connect")
             .arg("--add-header")
             .arg("Referer:https://elopage.com/")
             .arg(&embed_url)
