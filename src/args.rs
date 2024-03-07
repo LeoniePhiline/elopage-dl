@@ -1,39 +1,30 @@
 use std::path::PathBuf;
 
 use clap::Parser;
-
-use crate::Id;
+use reqwest::Url;
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
 pub(crate) struct Args {
-    /// The Course ID
-    #[arg(short, long, env = "COURSE_ID")]
-    pub course_id: Id,
+    /// Login email
+    #[arg(short, long)]
+    pub email: String,
 
-    /// The authorization token
-    #[arg(short, long, env = "AUTH_TOKEN")]
-    pub token: String,
-
-    /// Target-dir
-    #[arg(short, long, env = "ELOPAGE_DIR")]
-    pub output_dir: String,
+    /// Login password
+    #[arg(short, long)]
+    pub password: String,
 
     /// User agent (browser signature)
     #[arg(
         short,
         long,
         env = "USER_AGENT",
-        default_value = "User-Agent: Mozilla/5.0 (X11; Linux x86_64; rv:109.0) Gecko/20100101 Firefox/112.0"
+        default_value = "Mozilla/5.0 (X11; Linux x86_64; rv:123.0) Gecko/20100101 Firefox/123.0"
     )]
     pub user_agent: String,
 
-    /// Content language tag, such as "fr", "de-CH" or "en-CA"
-    #[arg(short, long, env = "CONTENT_LANGUAGE", default_value = "en")]
-    pub language: String,
-
     /// Download files of up to N lessons at the same time
-    #[arg(short, long, env = "PARALLEL_DOWNLOADS", default_value_t = 1)]
+    #[arg(short = 'P', long, env = "PARALLEL_DOWNLOADS", default_value_t = 1)]
     pub parallel: usize,
 
     /// Path to the `yt-dlp` binary - required only if vimeo iframes are used.
@@ -42,4 +33,10 @@ pub(crate) struct Args {
 
     #[command(flatten)]
     pub verbosity: clap_verbosity_flag::Verbosity,
+
+    /// The URL of the course to be downloaded
+    pub course_url: Url,
+
+    /// Target-dir to download into
+    pub output_dir: PathBuf,
 }
