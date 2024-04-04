@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 async-recursion = "1.0.5"
-clap = { version = "4.2.7", features = ["env", "wrap_help", "derive"] }
+clap = { version = "4.5.4", features = ["env", "wrap_help", "derive"] }
 clap-verbosity-flag = "2.2.0"
 color-eyre = "0.6.3"
 futures = { version = "0.3.30", default-features = false, features = ["std", "async-await"] }
