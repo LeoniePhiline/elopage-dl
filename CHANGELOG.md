@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Update dependencies.
+- Update `reqwest` to 0.13, enable `zstd` transport encoding.
 
 ## [0.4.0] - 2023-06-04
 
